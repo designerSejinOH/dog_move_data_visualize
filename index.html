@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>3D Dog Animation</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    #controls {
+      position: absolute;
+      bottom: 100px;
+      left: 10px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    #controls button {
+      margin: 5px;
+    }
+
+    #frameSlider {
+      width: 90vw;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="info">
+    <div>Time: <span id="time"></span>:<span id="second"></span></div>
+    <div>Roll: <span id="roll"></span></div>
+    <div>Pitch: <span id="pitch"></span></div>
+    <div>Yaw: <span id="yaw"></span></div>
+    <div>ax: <span id="ax"></span></div>
+    <div>ay: <span id="ay"></span></div>
+    <div>az: <span id="az"></span></div>
+    <div>gx: <span id="gx"></span></div>
+    <div>gy: <span id="gy"></span></div>
+    <div>gz: <span id="gz"></span></div>
+  </div>
+  <div id="controls">
+    <button id="playPauseButton">Play</button>
+    <input type="range" id="frameSlider" min="0" max="100" value="0">
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    fetch('bok_edit.csv')
+      .then(response => response.text())
+      .then(data => {
+        const lines = data.split('\n');
+        const headers = lines[0].split(',');
+        const rows = lines.slice(1).map(line => line.split(','));
+
+        const timeIndex = headers.indexOf('time');
+        const secondIndex = headers.indexOf('second');
+        const rollIndex = headers.indexOf('roll');
+        const pitchIndex = headers.indexOf('pitch');
+        const axIndex = headers.indexOf('ax');
+        const ayIndex = headers.indexOf('ay');
+        const azIndex = headers.indexOf('az');
+        const gxIndex = headers.indexOf('gx');
+        const gyIndex = headers.indexOf('gy');
+        const gzIndex = headers.indexOf('gz');
+
+        const animationData = rows.map(row => ({
+          time: row[timeIndex],
+          second: row[secondIndex],
+          roll: parseFloat(row[rollIndex]),
+          pitch: parseFloat(row[pitchIndex]),
+          yaw: 0,
+          ax: parseFloat(row[axIndex]),
+          ay: parseFloat(row[ayIndex]),
+          az: parseFloat(row[azIndex]),
+          gx: parseFloat(row[gxIndex]),
+          gy: parseFloat(row[gyIndex]),
+          gz: parseFloat(row[gzIndex])
+        }));
+
+        animateDog(animationData);
+      });
+
+    function animateDog(data) {
+
+      /**
+       * Sizes
+       */
+      const sizes = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      };
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer();
+
+      window.addEventListener("resize", () => {
+        // console.log("resize");
+        // Update sizes
+        sizes.width = window.innerWidth;
+        sizes.height = window.innerHeight;
+
+        // Update camera
+        camera.aspect = sizes.width / sizes.height;
+        camera.updateProjectionMatrix();
+
+        // Update renderer
+        renderer.setSize(sizes.width, sizes.height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // Update effect composer
+        // effectComposer.setSize(sizes.width, sizes.height);
+        // effectComposer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      });
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      /**
+       * Lights
+       */
+      const ambientLight = new THREE.AmbientLight(0xffffff, 2);
+      scene.add(ambientLight);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
+      directionalLight.castShadow = true;
+      directionalLight.shadow.mapSize.set(1024, 1024);
+      directionalLight.shadow.camera.far = 15;
+      directionalLight.shadow.camera.left = -7;
+      directionalLight.shadow.camera.top = 7;
+      directionalLight.shadow.camera.right = 7;
+      directionalLight.shadow.camera.bottom = -7;
+      directionalLight.shadow.normalBias = 0.05;
+      directionalLight.position.set(-4, 4, -4);
+      scene.add(directionalLight);
+
+      const hemisphereLight = new THREE.HemisphereLight(0xff0000, 0x0000ff, 5);
+      scene.add(hemisphereLight);
+
+      const pointLight = new THREE.PointLight(0xed8c78, 1, 10);
+      pointLight.position.set(0, 0.1, 0);
+      pointLight.castShadow = true;
+      pointLight.shadow.mapSize.set(1024, 1024);
+      pointLight.shadow.camera.far = 7;
+      scene.add(pointLight);
+
+      const textureLoader = new THREE.TextureLoader();
+      const groundTexture = textureLoader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
+      groundTexture.wrapS = groundTexture.wrapT = THREE.RepeatWrapping;
+      groundTexture.repeat.set(10, 10);
+
+      const groundGeometry = new THREE.PlaneGeometry(100, 100, 1, 1);
+      const groundMaterial = new THREE.MeshBasicMaterial({
+        map: groundTexture,
+        side: THREE.DoubleSide
+      });
+      const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -1;
+      scene.add(ground);
+
+      const geometry = new THREE.BoxGeometry(0.5, 0.5, 2);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x00ff00
+      });
+      const body = new THREE.Mesh(geometry, material);
+      body.position.y = 0.25;
+
+      const headGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+      const headMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff0000
+      });
+      const head = new THREE.Mesh(headGeometry, headMaterial);
+      head.position.y = 0.5;
+
+      const tailGeometry = new THREE.BoxGeometry(0.1, 0.1, 1);
+      const tailMaterial = new THREE.MeshBasicMaterial({
+        color: 'brown'
+      });
+      const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+      tail.position.y = -0.5;
+      tail.position.z = -1;
+
+      const legGeometry = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+      const legMaterial = new THREE.MeshBasicMaterial({
+        color: 'black'
+      });
+      const leg1 = new THREE.Mesh(legGeometry, legMaterial);
+      leg1.position.x = -0.25;
+      leg1.position.y = -0.25;
+      const leg2 = new THREE.Mesh(legGeometry, legMaterial);
+      leg2.position.x = 0.25;
+      leg2.position.y = -0.25;
+
+      const dog = new THREE.Group();
+      dog.add(head);
+      dog.add(tail);
+      dog.add(leg1);
+      dog.add(leg2);
+      dog.add(body);
+
+      dog.position.y = 1;
+      scene.add(dog);
+
+      camera.position.z = 5;
+      camera.position.y = 2;
+      camera.lookAt(dog.position);
+
+      let frame = 0;
+      let playing = false;
+
+      function animate() {
+        if (playing && frame < data.length) {
+          const {
+            time,
+            second,
+            roll,
+            pitch,
+            yaw,
+            ax,
+            ay,
+            az,
+            gx,
+            gy,
+            gz
+          } = data[frame];
+          dog.rotation.x = THREE.Math.degToRad(pitch);
+          dog.rotation.y = THREE.Math.degToRad(yaw);
+          dog.rotation.z = THREE.Math.degToRad(roll);
+
+          document.getElementById('time').textContent = time;
+          document.getElementById('second').textContent = second;
+          document.getElementById('roll').textContent = roll.toFixed(2);
+          document.getElementById('pitch').textContent = pitch.toFixed(2);
+          document.getElementById('yaw').textContent = yaw.toFixed(2);
+          document.getElementById('ax').textContent = ax.toFixed(2);
+          document.getElementById('ay').textContent = ay.toFixed(2);
+          document.getElementById('az').textContent = az.toFixed(2);
+          document.getElementById('gx').textContent = gx.toFixed(2);
+          document.getElementById('gy').textContent = gy.toFixed(2);
+          document.getElementById('gz').textContent = gz.toFixed(2);
+
+          frame++;
+          document.getElementById('frameSlider').value = frame;
+          setTimeout(animate, 5);
+        } else if (playing) {
+          frame = 0;
+          setTimeout(animate, 5);
+        }
+
+        // ground.material.map.offset.y += 0.01;
+        renderer.render(scene, camera);
+      }
+
+      document.getElementById('playPauseButton').addEventListener('click', () => {
+        playing = !playing;
+        document.getElementById('playPauseButton').textContent = playing ? 'Pause' : 'Play';
+        if (playing) animate();
+      });
+
+      document.getElementById('frameSlider').addEventListener('input', (event) => {
+        playing = false;
+        frame = parseInt(event.target.value, 10);
+        document.getElementById('playPauseButton').textContent = 'Play';
+        const {
+          time,
+          second,
+          roll,
+          pitch,
+          yaw,
+          ax,
+          ay,
+          az,
+          gx,
+          gy,
+          gz
+        } = data[frame];
+        dog.rotation.x = THREE.Math.degToRad(pitch);
+        dog.rotation.y = THREE.Math.degToRad(yaw);
+        dog.rotation.z = THREE.Math.degToRad(roll);
+
+        document.getElementById('time').textContent = time;
+        document.getElementById('second').textContent = second;
+        document.getElementById('roll').textContent = roll.toFixed(2);
+        document.getElementById('pitch').textContent = pitch.toFixed(2);
+        document.getElementById('yaw').textContent = yaw.toFixed(2);
+        document.getElementById('ax').textContent = ax.toFixed(2);
+        document.getElementById('ay').textContent = ay.toFixed(2);
+        document.getElementById('az').textContent = az.toFixed(2);
+        document.getElementById('gx').textContent = gx.toFixed(2);
+        document.getElementById('gy').textContent = gy.toFixed(2);
+        document.getElementById('gz').textContent = gz.toFixed(2);
+
+        renderer.render(scene, camera);
+      });
+
+      document.getElementById('frameSlider').max = data.length - 1;
+
+      animate();
+    }
+  </script>
+</body>
